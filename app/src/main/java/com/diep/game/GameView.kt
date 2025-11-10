@@ -23,6 +23,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private var cameraX = 0f
     private var cameraY = 0f
 
+    // Left joystick for movement
     private var joystickTouchId = -1
     private var joystickBaseX = 150f
     private var joystickBaseY = 0f
@@ -31,9 +32,14 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val joystickRadius = 80f
     private val joystickMaxDistance = 60f
 
-    private var aimTouchId = -1
-    private var lastAimX = 0f
-    private var lastAimY = 0f
+    // Right joystick for aiming
+    private var aimJoystickTouchId = -1
+    private var aimJoystickBaseX = 0f
+    private var aimJoystickBaseY = 0f
+    private var aimJoystickX = 0f
+    private var aimJoystickY = 0f
+    private val aimJoystickRadius = 80f
+    private val aimJoystickMaxDistance = 60f
 
     private var shootTimer = 0f
     private val shootCooldown = 0.15f // shots per second
@@ -53,13 +59,25 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private val joystickBasePaint = Paint().apply {
-        color = 0x88000000.toInt()
+        color = 0x88555555.toInt()
         style = Paint.Style.FILL
         isAntiAlias = true
     }
 
     private val joystickStickPaint = Paint().apply {
-        color = 0xCC000000.toInt()
+        color = 0xCC888888.toInt()
+        style = Paint.Style.FILL
+        isAntiAlias = true
+    }
+
+    private val aimJoystickBasePaint = Paint().apply {
+        color = 0x88FC7677.toInt()  // Red tint for aim joystick
+        style = Paint.Style.FILL
+        isAntiAlias = true
+    }
+
+    private val aimJoystickStickPaint = Paint().apply {
+        color = 0xCCFF0000.toInt()  // Bright red for aim stick
         style = Paint.Style.FILL
         isAntiAlias = true
     }
@@ -111,6 +129,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         joystickBaseY = height - 150f
+        aimJoystickBaseX = width - 150f
+        aimJoystickBaseY = height - 150f
+        aimJoystickX = aimJoystickBaseX
+        aimJoystickY = aimJoystickBaseY
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -140,15 +162,17 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                     return true
                 }
 
-                // Check if touching joystick area
+                // Check if touching left side (movement joystick)
                 if (x < width / 2 && joystickTouchId == -1) {
                     joystickTouchId = pointerId
                     joystickX = x
                     joystickY = y
-                } else if (aimTouchId == -1) {
-                    aimTouchId = pointerId
-                    lastAimX = x
-                    lastAimY = y
+                }
+                // Check if touching right side (aim joystick)
+                else if (x >= width / 2 && aimJoystickTouchId == -1) {
+                    aimJoystickTouchId = pointerId
+                    aimJoystickX = x
+                    aimJoystickY = y
                 }
             }
 
@@ -161,9 +185,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                     if (pointerId == joystickTouchId) {
                         joystickX = x
                         joystickY = y
-                    } else if (pointerId == aimTouchId) {
-                        lastAimX = x
-                        lastAimY = y
+                    } else if (pointerId == aimJoystickTouchId) {
+                        aimJoystickX = x
+                        aimJoystickY = y
                     }
                 }
             }
@@ -176,8 +200,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                     joystickTouchId = -1
                     joystickX = joystickBaseX
                     joystickY = joystickBaseY
-                } else if (pointerId == aimTouchId) {
-                    aimTouchId = -1
+                } else if (pointerId == aimJoystickTouchId) {
+                    aimJoystickTouchId = -1
+                    aimJoystickX = aimJoystickBaseX
+                    aimJoystickY = aimJoystickBaseY
                 }
             }
         }
@@ -187,7 +213,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     fun update(deltaTime: Float) {
         if (gameOver) return
 
-        // Update joystick and tank movement
+        // Update movement joystick and tank movement
         if (joystickTouchId != -1) {
             val dx = joystickX - joystickBaseX
             val dy = joystickY - joystickBaseY
@@ -208,18 +234,39 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             tank.velocityY = 0f
         }
 
-        // Aim tank
-        if (aimTouchId != -1) {
-            val worldAimX = lastAimX + cameraX - width / 2
-            val worldAimY = lastAimY + cameraY - height / 2
-            tank.aimAt(worldAimX, worldAimY)
-        }
+        // Update aim joystick and tank aiming
+        if (aimJoystickTouchId != -1) {
+            val dx = aimJoystickX - aimJoystickBaseX
+            val dy = aimJoystickY - aimJoystickBaseY
+            val distance = sqrt(dx * dx + dy * dy)
 
-        // Auto-shoot
-        shootTimer -= deltaTime
-        if (aimTouchId != -1 && shootTimer <= 0) {
-            bullets.add(tank.shoot())
-            shootTimer = shootCooldown
+            if (distance > aimJoystickMaxDistance) {
+                aimJoystickX = aimJoystickBaseX + (dx / distance) * aimJoystickMaxDistance
+                aimJoystickY = aimJoystickBaseY + (dy / distance) * aimJoystickMaxDistance
+            }
+
+            // Only aim if joystick is moved significantly
+            if (distance > 10f) {
+                val aimAngle = atan2(dy, dx)
+                tank.angle = aimAngle
+            }
+
+            // Auto-shoot when aim joystick is active
+            shootTimer -= deltaTime
+            if (distance > 10f && shootTimer <= 0) {
+                bullets.add(tank.shoot())
+                shootTimer = shootCooldown
+            }
+        } else {
+            // If not aiming with joystick, aim in direction of movement
+            if (joystickTouchId != -1) {
+                val dx = joystickX - joystickBaseX
+                val dy = joystickY - joystickBaseY
+                val distance = sqrt(dx * dx + dy * dy)
+                if (distance > 10f) {
+                    tank.angle = atan2(dy, dx)
+                }
+            }
         }
 
         // Update tank
@@ -320,7 +367,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun drawUI(canvas: Canvas) {
-        // Draw joystick
+        // Draw left movement joystick
         if (joystickTouchId != -1) {
             canvas.drawCircle(joystickBaseX, joystickBaseY, joystickRadius, joystickBasePaint)
             canvas.drawCircle(joystickX, joystickY, joystickRadius / 2, joystickStickPaint)
@@ -333,6 +380,21 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             })
             joystickBasePaint.alpha = 136
             joystickStickPaint.alpha = 204
+        }
+
+        // Draw right aim joystick
+        if (aimJoystickTouchId != -1) {
+            canvas.drawCircle(aimJoystickBaseX, aimJoystickBaseY, aimJoystickRadius, aimJoystickBasePaint)
+            canvas.drawCircle(aimJoystickX, aimJoystickY, aimJoystickRadius / 2, aimJoystickStickPaint)
+        } else {
+            canvas.drawCircle(aimJoystickBaseX, aimJoystickBaseY, aimJoystickRadius, aimJoystickBasePaint.apply {
+                alpha = 80
+            })
+            canvas.drawCircle(aimJoystickBaseX, aimJoystickBaseY, aimJoystickRadius / 2, aimJoystickStickPaint.apply {
+                alpha = 100
+            })
+            aimJoystickBasePaint.alpha = 136
+            aimJoystickStickPaint.alpha = 204
         }
 
         // Draw score and level
@@ -352,6 +414,14 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         bullets.clear()
         enemies.clear()
         spawnEnemies(20)
+
+        // Reset joysticks
+        joystickTouchId = -1
+        aimJoystickTouchId = -1
+        joystickX = joystickBaseX
+        joystickY = joystickBaseY
+        aimJoystickX = aimJoystickBaseX
+        aimJoystickY = aimJoystickBaseY
 
         gameOver = false
         shootTimer = 0f
