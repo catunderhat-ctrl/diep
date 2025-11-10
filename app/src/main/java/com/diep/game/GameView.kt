@@ -47,8 +47,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private var gameOver = false
     private var enemySpawnTimer = 0f
-    private var showUpgradeMenu = false
+    private var showStatUpgradeMenu = false
     private var showClassUpgradeMenu = false
+
+    // UI rectangles for stat upgrades (will be calculated in drawStatUpgradeMenu)
+    private val statButtonRects = mutableMapOf<StatType, android.graphics.RectF>()
+    private val classButtonRects = mutableMapOf<TankClass, android.graphics.RectF>()
 
     private val backgroundPaint = Paint().apply {
         color = 0xFFCDCDCD.toInt()
@@ -94,6 +98,37 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val gameOverPaint = Paint().apply {
         color = 0xFFFF0000.toInt()
         textSize = 80f
+        textAlign = Paint.Align.CENTER
+        isAntiAlias = true
+    }
+
+    private val overlayPaint = Paint().apply {
+        color = 0xCC000000.toInt() // Semi-transparent black
+        style = Paint.Style.FILL
+    }
+
+    private val buttonPaint = Paint().apply {
+        color = 0xFF4CAF50.toInt() // Green
+        style = Paint.Style.FILL
+        isAntiAlias = true
+    }
+
+    private val buttonDisabledPaint = Paint().apply {
+        color = 0xFF757575.toInt() // Gray
+        style = Paint.Style.FILL
+        isAntiAlias = true
+    }
+
+    private val buttonTextPaint = Paint().apply {
+        color = 0xFFFFFFFF.toInt()
+        textSize = 30f
+        textAlign = Paint.Align.LEFT
+        isAntiAlias = true
+    }
+
+    private val titlePaint = Paint().apply {
+        color = 0xFFFFFFFF.toInt()
+        textSize = 50f
         textAlign = Paint.Align.CENTER
         isAntiAlias = true
     }
@@ -178,6 +213,35 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                     return true
                 }
 
+                // Handle stat upgrade menu clicks
+                if (showStatUpgradeMenu) {
+                    statButtonRects.forEach { (stat, rect) ->
+                        if (rect.contains(x, y)) {
+                            if (tank.upgradeStat(stat)) {
+                                // Successfully upgraded
+                                if (tank.availableStatPoints == 0) {
+                                    showStatUpgradeMenu = false
+                                }
+                            }
+                            return true
+                        }
+                    }
+                    return true // Consume all touches when menu is open
+                }
+
+                // Handle tank class upgrade menu clicks
+                if (showClassUpgradeMenu) {
+                    classButtonRects.forEach { (tankClass, rect) ->
+                        if (rect.contains(x, y)) {
+                            if (tank.upgradeTankClass(tankClass)) {
+                                showClassUpgradeMenu = false
+                            }
+                            return true
+                        }
+                    }
+                    return true // Consume all touches when menu is open
+                }
+
                 // Check if touching left side (movement joystick)
                 if (x < width / 2 && joystickTouchId == -1) {
                     joystickTouchId = pointerId
@@ -228,6 +292,16 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     fun update(deltaTime: Float) {
         if (gameOver) return
+
+        // Open stat upgrade menu if tank has available stat points
+        if (tank.availableStatPoints > 0 && !showStatUpgradeMenu) {
+            showStatUpgradeMenu = true
+        }
+
+        // Pause gameplay when menus are open
+        if (showStatUpgradeMenu || showClassUpgradeMenu) {
+            return
+        }
 
         // Update movement joystick and tank movement
         if (joystickTouchId != -1) {
@@ -455,6 +529,13 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         // Draw UI
         drawUI(canvas)
 
+        // Draw upgrade menus (on top of everything)
+        if (showStatUpgradeMenu) {
+            drawStatUpgradeMenu(canvas)
+        } else if (showClassUpgradeMenu) {
+            drawClassUpgradeMenu(canvas)
+        }
+
         // Draw game over
         if (gameOver) {
             canvas.drawText("GAME OVER!", width / 2f, height / 2f - 50, gameOverPaint)
@@ -463,6 +544,109 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             })
             gameOverPaint.textSize = 80f
         }
+    }
+
+    private fun drawStatUpgradeMenu(canvas: Canvas) {
+        // Draw overlay
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), overlayPaint)
+
+        // Draw title
+        canvas.drawText("UPGRADE STATS", width / 2f, 100f, titlePaint)
+        canvas.drawText("Points: ${tank.availableStatPoints}", width / 2f, 160f, titlePaint.apply {
+            textSize = 40f
+        })
+        titlePaint.textSize = 50f
+
+        // Clear previous button rects
+        statButtonRects.clear()
+
+        // Draw stat buttons
+        val startY = 220f
+        val buttonWidth = width - 100f
+        val buttonHeight = 80f
+        val spacing = 10f
+
+        val stats = StatType.values()
+        stats.forEachIndexed { index, stat ->
+            val y = startY + index * (buttonHeight + spacing)
+            val rect = android.graphics.RectF(50f, y, 50f + buttonWidth, y + buttonHeight)
+            statButtonRects[stat] = rect
+
+            // Choose paint based on whether stat can be upgraded
+            val paint = if (tank.stats.canUpgrade(stat)) buttonPaint else buttonDisabledPaint
+            canvas.drawRect(rect, paint)
+
+            // Draw stat name and level
+            val level = tank.stats.getStatLevel(stat)
+            val statText = "${stat.displayName}: $level / ${TankStats.MAX_STAT_LEVEL}"
+            canvas.drawText(statText, 70f, y + 50f, buttonTextPaint)
+
+            // Draw stat effect
+            val effectText = when (stat) {
+                StatType.HEALTH_REGEN -> "${tank.stats.getHealthRegenRate()} HP/s"
+                StatType.MAX_HEALTH -> "+${tank.stats.getMaxHealthBonus().toInt()} HP"
+                StatType.BODY_DAMAGE -> "${(tank.stats.getBodyDamageMultiplier() * 100).toInt()}%"
+                StatType.BULLET_SPEED -> "${(tank.stats.getBulletSpeedMultiplier() * 100).toInt()}%"
+                StatType.BULLET_PENETRATION -> "+${tank.stats.getBulletPenetrationBonus().toInt()}"
+                StatType.BULLET_DAMAGE -> "${(tank.stats.getBulletDamageMultiplier() * 100).toInt()}%"
+                StatType.RELOAD -> "${(100 / tank.stats.getReloadMultiplier()).toInt()}%"
+                StatType.MOVEMENT_SPEED -> "${(tank.stats.getMovementSpeedMultiplier() * 100).toInt()}%"
+            }
+            buttonTextPaint.textAlign = Paint.Align.RIGHT
+            canvas.drawText(effectText, width - 70f, y + 50f, buttonTextPaint)
+            buttonTextPaint.textAlign = Paint.Align.LEFT
+        }
+    }
+
+    private fun drawClassUpgradeMenu(canvas: Canvas) {
+        // Draw overlay
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), overlayPaint)
+
+        // Draw title
+        canvas.drawText("LEVEL 15 UPGRADE!", width / 2f, 100f, titlePaint)
+        canvas.drawText("Choose Your Class", width / 2f, 160f, titlePaint.apply {
+            textSize = 40f
+        })
+        titlePaint.textSize = 50f
+
+        // Clear previous button rects
+        classButtonRects.clear()
+
+        // Get available upgrades
+        val availableUpgrades = tank.tankClass.getNextUpgrade(tank.level)
+
+        // Draw class buttons
+        val startY = 220f
+        val buttonWidth = width - 100f
+        val buttonHeight = 100f
+        val spacing = 15f
+
+        availableUpgrades.forEachIndexed { index, tankClass ->
+            val y = startY + index * (buttonHeight + spacing)
+            val rect = android.graphics.RectF(50f, y, 50f + buttonWidth, y + buttonHeight)
+            classButtonRects[tankClass] = rect
+
+            canvas.drawRect(rect, buttonPaint)
+
+            // Draw class name
+            canvas.drawText(tankClass.displayName, 70f, y + 40f, buttonTextPaint.apply {
+                textSize = 40f
+            })
+
+            // Draw class stats
+            val statsText = "Fire Rate: ${(tankClass.fireRate * 100).toInt()}% | " +
+                    "Damage: ${(tankClass.bulletDamage * 100).toInt()}% | " +
+                    "Speed: ${(tankClass.bulletSpeed * 100).toInt()}%"
+            canvas.drawText(statsText, 70f, y + 75f, buttonTextPaint.apply {
+                textSize = 25f
+            })
+            buttonTextPaint.textSize = 30f
+        }
+
+        // Draw instruction
+        titlePaint.textSize = 30f
+        canvas.drawText("Tap to select a class", width / 2f, height - 50f, titlePaint)
+        titlePaint.textSize = 50f
     }
 
     private fun drawUI(canvas: Canvas) {
@@ -501,19 +685,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         canvas.drawText("Level: ${tank.level}", 20f, 100f, textPaint)
         canvas.drawText("Class: ${tank.tankClass.displayName}", 20f, 150f, textPaint)
 
-        // Draw stat points indicator
-        if (tank.availableStatPoints > 0) {
+        // Draw stat points indicator (menu will auto-open)
+        if (tank.availableStatPoints > 0 && !showStatUpgradeMenu) {
             textPaint.color = 0xFFFFD700.toInt() // Gold color
             canvas.drawText("Upgrade Points: ${tank.availableStatPoints}", width - 300f, 50f, textPaint)
-            canvas.drawText("(Press 'K' to open upgrade menu)", width - 350f, 90f, textPaint.apply { textSize = 25f })
-            textPaint.textSize = 40f
-            textPaint.color = 0xFF000000.toInt()
-        }
-
-        // Draw class upgrade notification
-        if (showClassUpgradeMenu) {
-            textPaint.color = 0xFFFF00FF.toInt() // Magenta
-            canvas.drawText("LEVEL 15! Choose upgrade!", width / 2f - 200f, height - 50f, textPaint)
             textPaint.color = 0xFF000000.toInt()
         }
     }
@@ -555,8 +730,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         gameOver = false
         shootTimer = 0f
         enemySpawnTimer = 3f
-        showUpgradeMenu = false
+        showStatUpgradeMenu = false
         showClassUpgradeMenu = false
+        statButtonRects.clear()
+        classButtonRects.clear()
     }
 
     inner class GameThread(

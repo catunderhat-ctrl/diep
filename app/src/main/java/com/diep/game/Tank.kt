@@ -150,10 +150,6 @@ class Tank(x: Float, y: Float) : GameObject(x, y, 30f) {
             // Grant stat points
             availableStatPoints += levelsGained * TankStats.STAT_POINTS_PER_LEVEL
 
-            // Auto-upgrade stats in balanced way (temporary, will add UI later)
-            autoUpgradeStats(availableStatPoints)
-            availableStatPoints = 0
-
             // Fully restore health on level up
             maxHealth = 100f + stats.getMaxHealthBonus()
             health = maxHealth
