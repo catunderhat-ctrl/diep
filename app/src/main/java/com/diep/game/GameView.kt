@@ -47,6 +47,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private var gameOver = false
     private var enemySpawnTimer = 0f
+    private var showUpgradeMenu = false
+    private var showClassUpgradeMenu = false
 
     private val backgroundPaint = Paint().apply {
         color = 0xFFCDCDCD.toInt()
@@ -241,8 +243,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             val moveX = (joystickX - joystickBaseX) / joystickMaxDistance
             val moveY = (joystickY - joystickBaseY) / joystickMaxDistance
 
-            tank.velocityX = moveX * 300f
-            tank.velocityY = moveY * 300f
+            val moveSpeed = tank.getMoveSpeed()
+            tank.velocityX = moveX * moveSpeed
+            tank.velocityY = moveY * moveSpeed
         } else {
             tank.velocityX = 0f
             tank.velocityY = 0f
@@ -268,8 +271,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             // Auto-shoot when aim joystick is active
             shootTimer -= deltaTime
             if (distance > 10f && shootTimer <= 0) {
-                bullets.add(tank.shoot())
-                shootTimer = shootCooldown
+                bullets.addAll(tank.shoot())
+                shootTimer = tank.getShootCooldown()
             }
         }
         // Note: Tank angle is now controlled ONLY by the right joystick
@@ -407,6 +410,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             spawnBots(1)
         }
 
+        // Check for class upgrade availability
+        val availableUpgrades = tank.tankClass.getNextUpgrade(tank.level)
+        showClassUpgradeMenu = availableUpgrades.isNotEmpty()
+
         // Check game over
         if (!tank.isAlive) {
             gameOver = true
@@ -489,9 +496,26 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             aimJoystickStickPaint.alpha = 204
         }
 
-        // Draw score and level
+        // Draw score, level, and tank class
         canvas.drawText("Score: ${tank.score}", 20f, 50f, textPaint)
         canvas.drawText("Level: ${tank.level}", 20f, 100f, textPaint)
+        canvas.drawText("Class: ${tank.tankClass.displayName}", 20f, 150f, textPaint)
+
+        // Draw stat points indicator
+        if (tank.availableStatPoints > 0) {
+            textPaint.color = 0xFFFFD700.toInt() // Gold color
+            canvas.drawText("Upgrade Points: ${tank.availableStatPoints}", width - 300f, 50f, textPaint)
+            canvas.drawText("(Press 'K' to open upgrade menu)", width - 350f, 90f, textPaint.apply { textSize = 25f })
+            textPaint.textSize = 40f
+            textPaint.color = 0xFF000000.toInt()
+        }
+
+        // Draw class upgrade notification
+        if (showClassUpgradeMenu) {
+            textPaint.color = 0xFFFF00FF.toInt() // Magenta
+            canvas.drawText("LEVEL 15! Choose upgrade!", width / 2f - 200f, height - 50f, textPaint)
+            textPaint.color = 0xFF000000.toInt()
+        }
     }
 
     private fun restartGame() {
@@ -501,7 +525,18 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         tank.maxHealth = 100f
         tank.score = 0
         tank.level = 1
+        tank.availableStatPoints = 0
         tank.isAlive = true
+        tank.tankClass = TankClass.BASIC
+        // Reset all stats
+        tank.stats.healthRegen = 0
+        tank.stats.maxHealth = 0
+        tank.stats.bodyDamage = 0
+        tank.stats.bulletSpeed = 0
+        tank.stats.bulletPenetration = 0
+        tank.stats.bulletDamage = 0
+        tank.stats.reload = 0
+        tank.stats.movementSpeed = 0
 
         bullets.clear()
         enemies.clear()
@@ -520,6 +555,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         gameOver = false
         shootTimer = 0f
         enemySpawnTimer = 3f
+        showUpgradeMenu = false
+        showClassUpgradeMenu = false
     }
 
     inner class GameThread(

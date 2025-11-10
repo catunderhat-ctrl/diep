@@ -10,11 +10,13 @@ class Bullet(
     y: Float,
     angle: Float,
     val isPlayerBullet: Boolean,
-    private val speed: Float = 800f
+    speedMultiplier: Float = 1f,
+    damageMultiplier: Float = 1f
 ) : GameObject(x, y, 8f) {
 
     var lifetime: Float = 3f // seconds
-    val damage: Float = 20f
+    val damage: Float = 20f * damageMultiplier
+    private val speed: Float = 800f * speedMultiplier
 
     private val paint = Paint().apply {
         color = if (isPlayerBullet) 0xFF00B2E1.toInt() else 0xFFFC7677.toInt()
