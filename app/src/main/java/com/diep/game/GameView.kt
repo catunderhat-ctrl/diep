@@ -18,6 +18,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val tank: Tank = Tank(0f, 0f)
     private val bullets = mutableListOf<Bullet>()
     private val enemies = mutableListOf<Enemy>()
+    private val bots = mutableListOf<Bot>()
 
     private val worldSize = 3000f
     private var cameraX = 0f
@@ -99,8 +100,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         holder.addCallback(this)
         isFocusable = true
 
-        // Spawn initial enemies
+        // Spawn initial enemies and bots
         spawnEnemies(20)
+        spawnBots(3)
     }
 
     private fun spawnEnemies(count: Int) {
@@ -117,6 +119,18 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             // Don't spawn too close to player
             if (sqrt(x * x + y * y) > 400f) {
                 enemies.add(Enemy(x, y, type))
+            }
+        }
+    }
+
+    private fun spawnBots(count: Int) {
+        repeat(count) {
+            val x = Random.nextFloat() * worldSize - worldSize / 2
+            val y = Random.nextFloat() * worldSize - worldSize / 2
+
+            // Don't spawn too close to player
+            if (sqrt(x * x + y * y) > 500f) {
+                bots.add(Bot(x, y))
             }
         }
     }
@@ -287,10 +301,27 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         // Update enemies
         enemies.forEach { it.update(deltaTime) }
 
-        // Check bullet-enemy collisions
+        // Update bots
+        bots.forEach { bot ->
+            bot.updateAI(deltaTime, tank, enemies, bots.filter { it != bot })
+            bot.update(deltaTime)
+
+            // Constrain bot to world
+            bot.x = bot.x.coerceIn(-worldSize / 2, worldSize / 2)
+            bot.y = bot.y.coerceIn(-worldSize / 2, worldSize / 2)
+
+            // Bot shooting
+            if (bot.canShoot()) {
+                bullets.add(bot.shoot())
+            }
+        }
+
+        // Check bullet collisions
         val bulletsToRemove = mutableListOf<Bullet>()
         bullets.forEach { bullet ->
+            // Player bullets hit enemies and bots
             if (bullet.isPlayerBullet) {
+                // Hit enemies
                 enemies.forEach { enemy ->
                     if (enemy.isAlive && bullet.collidesWith(enemy)) {
                         val score = enemy.takeDamage(bullet.damage)
@@ -299,10 +330,53 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                         bulletsToRemove.add(bullet)
                     }
                 }
+                // Hit bots
+                bots.forEach { bot ->
+                    if (bot.isAlive && bullet.collidesWith(bot)) {
+                        bot.takeDamage(bullet.damage)
+                        if (!bot.isAlive) {
+                            tank.addScore(50) // Score for killing a bot
+                        }
+                        bullet.isAlive = false
+                        bulletsToRemove.add(bullet)
+                    }
+                }
+            }
+            // Bot bullets hit player, enemies, and other bots
+            else {
+                // Hit player
+                if (tank.isAlive && bullet.collidesWith(tank)) {
+                    tank.takeDamage(bullet.damage)
+                    bullet.isAlive = false
+                    bulletsToRemove.add(bullet)
+                }
+                // Hit enemies
+                enemies.forEach { enemy ->
+                    if (enemy.isAlive && bullet.collidesWith(enemy)) {
+                        val score = enemy.takeDamage(bullet.damage)
+                        // Find which bot fired this bullet and give them score
+                        bots.forEach { bot ->
+                            if (bot.isAlive && score > 0) {
+                                bot.addScore(score)
+                            }
+                        }
+                        bullet.isAlive = false
+                        bulletsToRemove.add(bullet)
+                    }
+                }
+                // Hit other bots
+                bots.forEach { bot ->
+                    if (bot.isAlive && bullet.collidesWith(bot)) {
+                        bot.takeDamage(bullet.damage)
+                        bullet.isAlive = false
+                        bulletsToRemove.add(bullet)
+                    }
+                }
             }
         }
         bullets.removeAll(bulletsToRemove)
         enemies.removeAll { !it.isAlive }
+        bots.removeAll { !it.isAlive }
 
         // Check tank-enemy collisions
         enemies.forEach { enemy ->
@@ -311,11 +385,33 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             }
         }
 
+        // Check tank-bot collisions
+        bots.forEach { bot ->
+            if (tank.collidesWith(bot)) {
+                tank.takeDamage(15f * deltaTime)
+                bot.takeDamage(15f * deltaTime)
+            }
+        }
+
+        // Check bot-enemy collisions
+        bots.forEach { bot ->
+            enemies.forEach { enemy ->
+                if (bot.collidesWith(enemy)) {
+                    bot.takeDamage(15f * deltaTime)
+                }
+            }
+        }
+
         // Spawn new enemies
         enemySpawnTimer -= deltaTime
         if (enemySpawnTimer <= 0 && enemies.size < 50) {
             spawnEnemies(5)
             enemySpawnTimer = 3f
+        }
+
+        // Spawn new bots if too few
+        if (bots.size < 3) {
+            spawnBots(1)
         }
 
         // Check game over
@@ -346,6 +442,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
         // Draw enemies
         enemies.forEach { it.draw(canvas, cameraX, cameraY) }
+
+        // Draw bots
+        bots.forEach { it.draw(canvas, cameraX, cameraY) }
 
         // Draw bullets
         bullets.forEach { it.draw(canvas, cameraX, cameraY) }
@@ -413,7 +512,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
         bullets.clear()
         enemies.clear()
+        bots.clear()
         spawnEnemies(20)
+        spawnBots(3)
 
         // Reset joysticks
         joystickTouchId = -1
