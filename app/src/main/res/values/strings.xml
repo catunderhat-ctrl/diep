@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Diep.io Clone</string>
+    <string name="score">Score: %d</string>
+    <string name="level">Level: %d</string>
+    <string name="game_over">Game Over!</string>
+    <string name="tap_to_restart">Tap to Restart</string>
+</resources>

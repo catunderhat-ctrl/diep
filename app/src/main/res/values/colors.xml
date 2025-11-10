@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background">#CDCDCD</color>
+    <color name="grid_line">#B8B8B8</color>
+    <color name="player_body">#00B2E1</color>
+    <color name="player_barrel">#999999</color>
+    <color name="bullet">#00B2E1</color>
+    <color name="enemy_square">#FFE869</color>
+    <color name="enemy_triangle">#FC7677</color>
+    <color name="enemy_pentagon">#768DFC</color>
+    <color name="health_bg">#555555</color>
+    <color name="health_fg">#85E37D</color>
+</resources>
