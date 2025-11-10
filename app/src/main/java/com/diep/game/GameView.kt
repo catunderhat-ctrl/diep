@@ -271,17 +271,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 bullets.add(tank.shoot())
                 shootTimer = shootCooldown
             }
-        } else {
-            // If not aiming with joystick, aim in direction of movement
-            if (joystickTouchId != -1) {
-                val dx = joystickX - joystickBaseX
-                val dy = joystickY - joystickBaseY
-                val distance = sqrt(dx * dx + dy * dy)
-                if (distance > 10f) {
-                    tank.angle = atan2(dy, dx)
-                }
-            }
         }
+        // Note: Tank angle is now controlled ONLY by the right joystick
+        // No auto-aiming when moving without aiming
 
         // Update tank
         tank.update(deltaTime)
@@ -313,6 +305,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             // Bot shooting
             if (bot.canShoot()) {
                 bullets.add(bot.shoot())
+                bot.shootTimer = bot.shootCooldown // Reset shoot timer after firing
             }
         }
 

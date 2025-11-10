@@ -19,8 +19,8 @@ class Bot(x: Float, y: Float) : GameObject(x, y, 30f) {
     private var target: GameObject? = null
     private var targetSearchTimer: Float = 0f
     private val targetSearchInterval: Float = 1f // Search for target every second
-    private var shootTimer: Float = 0f
-    private val shootCooldown: Float = 0.2f
+    var shootTimer: Float = 0f // Made public so GameView can reset it after shooting
+    val shootCooldown: Float = 0.2f // Made public so GameView can access it
     private val aggroRange: Float = 600f
     private val shootRange: Float = 500f
     private val retreatHealthPercent: Float = 0.3f
@@ -142,13 +142,14 @@ class Bot(x: Float, y: Float) : GameObject(x, y, 30f) {
                 }
             }
 
-            // Shooting logic
+            // Update shoot timer (actual shooting happens in GameView)
             shootTimer -= deltaTime
+
+            // Add some aiming inaccuracy when ready to shoot
             if (distanceToTarget < shootRange && shootTimer <= 0f) {
-                // Add some inaccuracy to make bots less perfect
                 val inaccuracy = (Random.nextFloat() - 0.5f) * 0.2f
                 angle += inaccuracy
-                shootTimer = shootCooldown
+                // Note: shootTimer is reset in GameView after actual shooting
             }
         } ?: run {
             // No target - wander randomly
