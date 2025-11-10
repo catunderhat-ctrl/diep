@@ -44,7 +44,7 @@ class Enemy(
     }
 
     init {
-        val (hp, score, color) = when (type) {
+        val (hp, score, paintColor) = when (type) {
             EnemyType.SQUARE -> Triple(30f, 10, 0xFFFFE869.toInt())
             EnemyType.TRIANGLE -> Triple(50f, 25, 0xFFFC7677.toInt())
             EnemyType.PENTAGON -> Triple(100f, 130, 0xFF768DFC.toInt())
@@ -53,7 +53,7 @@ class Enemy(
         maxHealth = hp
         scoreValue = score
         paint = Paint().apply {
-            color = color
+            color = paintColor
             style = Paint.Style.FILL
             isAntiAlias = true
         }
