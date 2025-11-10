@@ -24,6 +24,8 @@ class Bot(x: Float, y: Float) : GameObject(x, y, 30f) {
     private val aggroRange: Float = 600f
     private val shootRange: Float = 500f
     private val retreatHealthPercent: Float = 0.3f
+    private var explorationShootTimer: Float = 0f // Timer for exploration shooting
+    private val explorationShootInterval: Float = 2f // Shoot randomly every 2 seconds when exploring
 
     // Bot color variants
     private val botColorIndex = Random.nextInt(3)
@@ -145,18 +147,27 @@ class Bot(x: Float, y: Float) : GameObject(x, y, 30f) {
             // Update shoot timer (actual shooting happens in GameView)
             shootTimer -= deltaTime
 
-            // Add some aiming inaccuracy when ready to shoot
+            // Add significant aiming inaccuracy - bots are not perfect shots
             if (distanceToTarget < shootRange && shootTimer <= 0f) {
-                val inaccuracy = (Random.nextFloat() - 0.5f) * 0.2f
+                val inaccuracy = (Random.nextFloat() - 0.5f) * 0.6f // Increased from 0.2f to 0.6f
                 angle += inaccuracy
                 // Note: shootTimer is reset in GameView after actual shooting
             }
         } ?: run {
-            // No target - wander randomly
+            // No target - explore and shoot randomly to "search" for targets
             if (Random.nextFloat() < 0.02f) { // 2% chance per frame to change direction
                 val wanderAngle = Random.nextFloat() * 2 * Math.PI.toFloat()
                 velocityX = cos(wanderAngle) * 100f
                 velocityY = sin(wanderAngle) * 100f
+            }
+
+            // Shoot randomly while exploring to "scan" the area
+            explorationShootTimer -= deltaTime
+            if (explorationShootTimer <= 0f && shootTimer <= 0f) {
+                // Aim in a random direction
+                angle = Random.nextFloat() * 2 * Math.PI.toFloat()
+                explorationShootTimer = explorationShootInterval + Random.nextFloat() * 1f // 2-3 seconds
+                // Shoot will happen in GameView through canShoot() check
             }
         }
     }
@@ -202,18 +213,18 @@ class Bot(x: Float, y: Float) : GameObject(x, y, 30f) {
     }
 
     fun canShoot(): Boolean {
-        return shootTimer <= 0f && target != null && distanceTo(target!!) < shootRange
+        // Shoot when has a target in range OR when exploring and timer is ready
+        return shootTimer <= 0f && (
+            (target != null && distanceTo(target!!) < shootRange) ||
+            (target == null && explorationShootTimer <= 0f)
+        )
     }
 
     override fun update(deltaTime: Float) {
         x += velocityX * deltaTime
         y += velocityY * deltaTime
 
-        // Regenerate health slowly
-        if (health < maxHealth) {
-            health += 1.5f * deltaTime
-            if (health > maxHealth) health = maxHealth
-        }
+        // Health only regenerates on level up
     }
 
     override fun draw(canvas: Canvas, cameraX: Float, cameraY: Float) {

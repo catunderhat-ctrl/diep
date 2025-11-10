@@ -77,11 +77,7 @@ class Tank(x: Float, y: Float) : GameObject(x, y, 30f) {
         x += velocityX * deltaTime
         y += velocityY * deltaTime
 
-        // Regenerate health slowly
-        if (health < maxHealth) {
-            health += 2f * deltaTime
-            if (health > maxHealth) health = maxHealth
-        }
+        // Health only regenerates on level up
     }
 
     override fun draw(canvas: Canvas, cameraX: Float, cameraY: Float) {
